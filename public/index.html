@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S3 File Operations Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #f4f4f4;
+    }
+
+    h1,
+    h2 {
+      color: #333;
+      border-bottom: 2px solid #333;
+      padding-bottom: 10px;
+    }
+
+    section {
+      margin-bottom: 30px;
+      background-color: white;
+      border: 1px solid #ddd;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    button,
+    input[type="text"] {
+      margin-top: 10px;
+      padding: 8px 15px;
+      border-radius: 4px;
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    input[type="file"],
+    input[type="text"] {
+      margin-bottom: 10px;
+      width: calc(100% - 30px);
+    }
+
+    .url-display {
+      word-break: break-all;
+      background-color: #e9ecef;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    .presigned-url-box {
+      display: none;
+      border: 1px solid #007bff;
+      background-color: #f0f8ff;
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .presigned-url-box::before {
+      content: '';
+      position: absolute;
+      top: -10px;
+      left: -10px;
+      right: -10px;
+      bottom: -10px;
+      background: rgba(0, 123, 255, 0.1);
+      border-radius: 5px;
+      z-index: 0;
+    }
+
+    .presigned-url-box span {
+      position: relative;
+      z-index: 1;
+    }
+
+    #objectList {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    #objectList li {
+      margin-bottom: 15px;
+      padding: 15px;
+      background-color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s;
+    }
+
+    #objectList li:hover {
+      transform: translateY(-2px);
+    }
+
+    #objectList li strong {
+      display: block;
+      font-size: 1.1rem;
+      color: #007bff;
+    }
+
+    #objectList li small {
+      display: block;
+      font-size: 0.9rem;
+      color: #6c757d;
+      margin-top: 5px;
+    }
+
+    #objectList button {
+      margin-top: 10px;
+      margin-right: 10px;
+      padding: 6px 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #objectList button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>S3 File Operations Demo</h1>
+
+  <section>
+    <h2>Presigned URL Upload</h2>
+    <input type="file" id="presignedFileInput">
+    <button onclick="uploadFilePresigned()">Upload with Presigned URL</button>
+    <div id="presignedUploadUrl" class="presigned-url-box">
+      <span></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Direct Upload</h2>
+    <input type="file" id="directFileInput">
+    <button onclick="uploadFileDirect()">Upload Directly</button>
+  </section>
+
+  <section>
+    <h2>File Operations</h2>
+    <button onclick="listObjects()">List Objects</button>
+    <ul id="objectList"></ul>
+  </section>
+
+  <section>
+    <h2>Download with Custom Presigned URL</h2>
+    <input type="text" id="customPresignedUrl" placeholder="Enter presigned URL here">
+    <button onclick="downloadWithCustomUrl()">Download with Custom URL</button>
+  </section>
+
+  <script>
+    function formatSize(bytes) {
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      if (bytes === 0) return '0 Byte';
+      const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+      return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    async function uploadFilePresigned() {
+      const file = document.getElementById('presignedFileInput').files[0];
+      const filename = encodeURIComponent(file.name);
+      const contentType = encodeURIComponent(file.type);
+
+      const response = await fetch(`/upload-url?filename=${filename}&contentType=${contentType}`);
+      const { uploadUrl } = await response.json();
+
+      const urlDisplay = document.getElementById('presignedUploadUrl');
+      urlDisplay.style.display = 'block';
+      urlDisplay.querySelector('span').textContent = `Presigned Upload URL: ${uploadUrl}`;
+
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type
+        }
+      });
+
+      alert('File uploaded successfully using presigned URL!');
+      listObjects();
+    }
+
+    async function uploadFileDirect() {
+      const file = document.getElementById('directFileInput').files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+      alert(result.message);
+      listObjects();
+    }
+
+    async function listObjects() {
+      const response = await fetch('/list');
+      const data = await response.json();
+      const objectList = document.getElementById('objectList');
+      objectList.innerHTML = '';
+      data.objects.forEach(obj => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+                    <strong>${obj.key}</strong> (${formatSize(obj.size)}, last modified: ${new Date(obj.lastModified).toLocaleString()})
+                    <br>
+                    <button onclick="downloadFilePresigned('${obj.key}')">Download (Presigned)</button>
+                    <button onclick="downloadFileDirect('${obj.key}')">Download (Direct)</button>
+                    <div id="presignedDownloadUrl-${obj.key}" class="presigned-url-box">
+                        <span></span>
+                    </div>
+                `;
+        objectList.appendChild(li);
+      });
+    }
+
+    async function downloadFilePresigned(filename) {
+      const response = await fetch(`/download-url?filename=${encodeURIComponent(filename)}`);
+      const { downloadUrl } = await response.json();
+
+      const urlDisplay = document.getElementById(`presignedDownloadUrl-${filename}`);
+      urlDisplay.style.display = 'block';
+      urlDisplay.querySelector('span').textContent = `Presigned Download URL: ${downloadUrl}`;
+
+      window.open(downloadUrl, '_blank');
+    }
+
+    async function downloadFileDirect(filename) {
+      window.location.href = `/download?filename=${encodeURIComponent(filename)}`;
+    }
+
+    async function downloadWithCustomUrl() {
+      const customUrl = document.getElementById('customPresignedUrl').value.trim();
+      if (!customUrl) {
+        alert('Please enter a presigned URL');
+        return;
+      }
+
+      try {
+        const response = await fetch(customUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = 'downloaded_file'; // You might want to extract the filename from the URL if possible
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          alert('File downloaded successfully!');
+        } else if (response.status === 403) {
+          alert('Access denied. The URL might be expired or invalid.');
+        } else {
+          alert(`Failed to download. Status: ${response.status}`);
+        }
+      } catch (error) {
+        alert(`Error downloading file: ${error.message}`);
+      }
+    }
+
+    // Initial load of objects
+    listObjects();
+  </script>
+</body>
+
+</html>
